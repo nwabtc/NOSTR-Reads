@@ -1,1 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NWA Bitcoin Reads</title>
+    <style>
+        body { 
+            font-family: system-ui, sans-serif; 
+            max-width: 800px; 
+            margin: 0 auto; 
+            padding: 2rem; 
+            background: #1a1a1a;
+            color: #e0e0e0;
+        }
+        h1 { color: #f7931a; }
+        .read-card { 
+            background: #2d2d2d; 
+            border-radius: 8px; 
+            padding: 1.5rem; 
+            margin-bottom: 1rem; 
+            border: 1px solid #404040;
+        }
+        .read-card h2 { margin-top: 0; font-size: 1.3rem; }
+        .read-card a { color: #f7931a; text-decoration: none; }
+        .summary { color: #bbb; margin: 0.5rem 0; }
+        .meta { color: #666; font-size: 0.85rem; }
+        .tag { background: #f7931a; color: #000; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; }
+        .error { background: #3d1f1f; padding: 1rem; border-radius: 8px; color: #ff6b6b; }
+        .debug { background: #222; padding: 1rem; border-radius: 4px; font-family: monospace; font-size: 0.8rem; color: #666; margin-top: 1rem; }
+    </style>
+</head>
+<body>
+    <h1>📚 NWA Bitcoin Reads</h1>
+    <div id="status">Loading...</div>
+    <div id="content"></div>
+    
+    <!-- Debug info - remove this later -->
+    <div id="debug" class="debug" style="display:none;"></div>
 
+    <script>
+        const AUTHOR_NPUB = 'npub1wqpvs2tewfzm2vug3g3jk4935m2q32rmd6gptskeeffqwe4dnxvsj6fvyy';
+        const AUTHOR_HEX = '3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d';
+        
+        async function loadReads() {
+            const statusEl = document.getElementById('status');
+            const contentEl = document.getElementById('content');
+            const debugEl = document.getElementById('debug');
+            
+            try {
+                // IMPORTANT: Use relative path from HTML file location
+                const response = await fetch('./data/reads.json');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const json = await response.json();
+                
+                // Debug: Show raw data (remove in production)
+                debugEl.style.display = 'block';
+                debugEl.textContent = 'Debug: ' + JSON.stringify(json).substring(0, 200) + '...';
+                
+                if (!json.data || !Array.isArray(json.data)) {
+                    throw new Error('Invalid data structure');
+                }
+                
+                // Filter for kind 30023 only and sort
+                const reads = json.data
+                    .filter(item => item.kind === 30023)
+                    .sort((a, b) => b.created_at - a.created_at);
+                
+                statusEl.innerHTML = `<small style="color:#666">Last updated: ${new Date(json.lastUpdated * 1000).toLocaleString()}</small>`;
+                
+                if (reads.length === 0) {
+                    contentEl.innerHTML = `
+                        <div class="error">
+                            No reads found in cache. 
+                            <a href="https://primal.net/p/${AUTHOR_NPUB}" style="color:#f7931a">View on Primal →</a>
+                        </div>`;
+                    return;
+                }
+                
+                contentEl.innerHTML = reads.map(read => {
+                    const title = read.tags?.find(t => t[0] === 'title')?.[1] || 'Untitled';
+                    const summary = (read.content || '').substring(0, 200).replace(/#/g, '');
+                    const date = new Date(read.created_at * 1000).toLocaleDateString();
+                    
+                    return `
+                        <div class="read-card">
+                            <h2><a href="https://primal.net/e/${read.id}" target="_blank">${escapeHtml(title)}</a></h2>
+                            <div class="summary">${escapeHtml(summary)}...</div>
+                            <div class="meta">
+                                <span class="tag">Read</span>
+                                ${date} • ${read.id.substring(0,8)}...
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+                
+            } catch (error) {
+                statusEl.innerHTML = '<span style="color:#ff6b6b">Error loading cached data</span>';
+                contentEl.innerHTML = `
+                    <div class="error">
+                        <p><strong>Error:</strong> ${error.message}</p>
+                        <p>The cache file might not exist yet or the GitHub Action hasn't run.</p>
+                        <p><a href="https://primal.net/p/${AUTHOR_NPUB}" style="color:#f7931a">View on Primal →</a></p>
+                    </div>
+                `;
+                debugEl.style.display = 'block';
+                debugEl.textContent = 'Error details: ' + error.message;
+            }
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text || '';
+            return div.innerHTML;
+        }
+        
+        loadReads();
+    </script>
+</body>
+</html>
