@@ -14,16 +14,24 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-      
-      - name: Fetch reads from Nostr relay
+      - name: Fetch reads via HTTP API
         run: |
-          npm init -y
-          npm install nostr-tools@2.3.1
-          node fetch-reads.js
+          mkdir -p data
+          
+          # Use nostr.band API (reliable HTTP, no WebSockets)
+          curl -s "https://api.nostr.band/v0/events?authors=3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d&kinds=30023&limit=50" > /tmp/response.json
+          
+          # Check if we got valid data
+          if [ -s /tmp/response.json ]; then
+            TIMESTAMP=$(date +%s)
+            # Extract the events array from the response
+            EVENTS=$(cat /tmp/response.json | jq '.events // []')
+            echo "{\"lastUpdated\": $TIMESTAMP, \"data\": $EVENTS}" > data/reads.json
+            echo "Success: $(echo $EVENTS | jq 'length') reads found"
+          else
+            echo "Error: Empty response from API"
+            exit 1
+          fi
       
       - name: Commit and push
         run: |
